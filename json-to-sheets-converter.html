@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON ⇄ Sheets Converter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.15) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(147, 51, 234, 0.15) 0%, transparent 50%);
+            animation: float 20s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(30px, -30px) rotate(5deg); }
+            66% { transform: translate(-20px, 20px) rotate(-5deg); }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding-top: 40px;
+        }
+        
+        h1 {
+            font-size: 56px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            letter-spacing: -2px;
+        }
+        
+        .subtitle {
+            color: #9ca3af;
+            font-size: 18px;
+            font-weight: 400;
+        }
+        
+        .mode-selector {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 48px;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 8px;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        .mode-btn {
+            flex: 1;
+            padding: 20px;
+            border: none;
+            border-radius: 12px;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-align: center;
+            color: #9ca3af;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .mode-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .mode-btn:hover::before {
+            opacity: 1;
+        }
+        
+        .mode-btn.active {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
+            color: #fff;
+            box-shadow: 0 8px 32px rgba(168, 85, 247, 0.2);
+        }
+        
+        .mode-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+            display: block;
+        }
+        
+        .mode-title {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .mode-desc {
+            font-size: 13px;
+            opacity: 0.7;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+        
+        .card:hover {
+            border-color: rgba(168, 85, 247, 0.3);
+            box-shadow: 0 8px 32px rgba(168, 85, 247, 0.1);
+        }
+        
+        .card h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #fff;
+            font-weight: 600;
+        }
+        
+        .format-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+        }
+        
+        .format-option {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        
+        .format-option::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 12px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(147, 51, 234, 0.5));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .format-option:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.04);
+        }
+        
+        .format-option.selected {
+            background: rgba(168, 85, 247, 0.1);
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+        
+        .format-option.selected::before {
+            opacity: 1;
+        }
+        
+        .format-option input[type="radio"] {
+            display: none;
+        }
+        
+        .format-option label {
+            cursor: pointer;
+            display: block;
+        }
+        
+        .format-title {
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 6px;
+            font-size: 15px;
+        }
+        
+        .format-desc {
+            color: #9ca3af;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+        
+        .format-example {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #a78bfa;
+            border-left: 2px solid rgba(168, 85, 247, 0.3);
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 220px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            transition: all 0.3s;
+            color: #fff;
+        }
+        
+        textarea::placeholder {
+            color: #4b5563;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: rgba(168, 85, 247, 0.5);
+            background: rgba(0, 0, 0, 0.6);
+            box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.1);
+        }
+        
+        .file-upload {
+            border: 2px dashed rgba(168, 85, 247, 0.3);
+            border-radius: 16px;
+            padding: 48px 32px;
+            text-align: center;
+            background: rgba(168, 85, 247, 0.03);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .file-upload:hover {
+            background: rgba(168, 85, 247, 0.08);
+            border-color: rgba(168, 85, 247, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .file-upload.dragover {
+            background: rgba(168, 85, 247, 0.15);
+            border-color: rgba(168, 85, 247, 0.7);
+            transform: scale(1.02);
+        }
+        
+        .upload-icon {
+            font-size: 56px;
+            margin-bottom: 16px;
+            opacity: 0.8;
+        }
+        
+        .upload-text {
+            color: #a78bfa;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .upload-hint {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .file-name {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: rgba(168, 85, 247, 0.1);
+            border-radius: 8px;
+            color: #a78bfa;
+            font-weight: 500;
+            display: inline-block;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 16px;
+            margin-top: 32px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        button:hover::before {
+            opacity: 1;
+        }
+        
+        .convert-btn {
+            background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+            color: white;
+            box-shadow: 0 4px 24px rgba(168, 85, 247, 0.3);
+        }
+        
+        .convert-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(168, 85, 247, 0.4);
+        }
+        
+        .convert-btn:active {
+            transform: translateY(0);
+        }
+        
+        .download-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            display: none;
+            box-shadow: 0 4px 24px rgba(16, 185, 129, 0.3);
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4);
+        }
+        
+        .download-btn.show {
+            display: block;
+        }
+        
+        .output-section {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .output-section.show {
+            display: block;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        th {
+            background: rgba(168, 85, 247, 0.1);
+            font-weight: 600;
+            color: #a78bfa;
+            position: sticky;
+            top: 0;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        td {
+            color: #d1d5db;
+        }
+        
+        tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        
+        .table-container {
+            max-height: 500px;
+            overflow: auto;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        .table-container::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .table-container::-webkit-scrollbar-thumb {
+            background: rgba(168, 85, 247, 0.3);
+            border-radius: 4px;
+        }
+        
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(168, 85, 247, 0.5);
+        }
+        
+        .json-output {
+            background: rgba(0, 0, 0, 0.6);
+            color: #d1d5db;
+            padding: 24px;
+            border-radius: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        
+        .copy-btn {
+            background: rgba(168, 85, 247, 0.2);
+            color: #a78bfa;
+            padding: 10px 20px;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+        }
+        
+        .copy-btn:hover {
+            background: rgba(168, 85, 247, 0.3);
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+        
+        .info-box {
+            background: rgba(168, 85, 247, 0.05);
+            border-left: 3px solid rgba(168, 85, 247, 0.5);
+            padding: 20px 24px;
+            border-radius: 12px;
+            margin-top: 32px;
+        }
+        
+        .info-box h3 {
+            color: #a78bfa;
+            margin-bottom: 12px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .info-box p {
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        
+        .error {
+            background: rgba(239, 68, 68, 0.05);
+            border-left-color: rgba(239, 68, 68, 0.5);
+        }
+        
+        .error h3 {
+            color: #f87171;
+        }
+        
+        .error p {
+            color: #fca5a5;
+        }
+        
+        .row-count {
+            text-align: right;
+            color: #6b7280;
+            font-size: 14px;
+            margin-top: 12px;
+            font-weight: 500;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 36px;
+            }
+            
+            .format-options {
+                grid-template-columns: 1fr;
+            }
+            
+            .mode-selector {
+                flex-direction: column;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>JSON ⇄ Sheets</h1>
+            <p class="subtitle">Bidirectional converter with modern simplicity</p>
+        </header>
+        
+        <div class="mode-selector">
+            <div class="mode-btn active" onclick="switchMode('jsonToSheets')">
+                <span class="mode-icon">→</span>
+                <div class="mode-title">JSON → Sheets</div>
+                <div class="mode-desc">Convert to CSV/Excel</div>
+            </div>
+            <div class="mode-btn" onclick="switchMode('sheetsToJson')">
+                <span class="mode-icon">←</span>
+                <div class="mode-title">Sheets → JSON</div>
+                <div class="mode-desc">Convert to JSON</div>
+            </div>
+        </div>
+        
+        <!-- JSON to Sheets Mode -->
+        <div id="jsonToSheetsMode">
+            <div class="card">
+                <h3>Output Format</h3>
+                <div class="format-options">
+                    <div class="format-option selected" onclick="selectFormat('keyValue')">
+                        <input type="radio" id="keyValue" name="format" value="keyValue" checked>
+                        <label for="keyValue">
+                            <div class="format-title">Key-Value Pairs</div>
+                            <div class="format-desc">Object → 2 columns</div>
+                            <div class="format-example">{"name": "John"} → name | John</div>
+                        </label>
+                    </div>
+                    
+                    <div class="format-option" onclick="selectFormat('arrayOfObjects')">
+                        <input type="radio" id="arrayOfObjects" name="format" value="arrayOfObjects">
+                        <label for="arrayOfObjects">
+                            <div class="format-title">Array of Objects</div>
+                            <div class="format-desc">Each object → row</div>
+                            <div class="format-example">[{"name": "John"}] → name<br>John</div>
+                        </label>
+                    </div>
+                    
+                    <div class="format-option" onclick="selectFormat('nestedObject')">
+                        <input type="radio" id="nestedObject" name="format" value="nestedObject">
+                        <label for="nestedObject">
+                            <div class="format-title">Nested Object</div>
+                            <div class="format-desc">Flattened with dots</div>
+                            <div class="format-example">{"user": {"name": "John"}} → user.name | John</div>
+                        </label>
+                    </div>
+                    
+                    <div class="format-option" onclick="selectFormat('arrayOfArrays')">
+                        <input type="radio" id="arrayOfArrays" name="format" value="arrayOfArrays">
+                        <label for="arrayOfArrays">
+                            <div class="format-title">Array of Arrays</div>
+                            <div class="format-desc">Arrays → rows</div>
+                            <div class="format-example">[["name"], ["John"]] → name<br>John</div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <textarea id="jsonInput" placeholder='Paste your JSON here...'></textarea>
+            </div>
+            
+            <div class="button-group">
+                <button class="convert-btn" onclick="convertJSON()">Convert</button>
+                <button class="download-btn" id="downloadBtnJSON" onclick="downloadCSV()">Download CSV</button>
+            </div>
+        </div>
+        
+        <!-- Sheets to JSON Mode -->
+        <div id="sheetsToJsonMode" class="hidden">
+            <div class="card">
+                <h3>JSON Output Format</h3>
+                <div class="format-options">
+                    <div class="format-option selected" onclick="selectReverseFormat('keyValueReverse')">
+                        <input type="radio" id="keyValueReverse" name="reverseFormat" value="keyValueReverse" checked>
+                        <label for="keyValueReverse">
+                            <div class="format-title">Key-Value Object</div>
+                            <div class="format-desc">2 columns → Object</div>
+                            <div class="format-example">name | John → {"name": "John"}</div>
+                        </label>
+                    </div>
+                    
+                    <div class="format-option" onclick="selectReverseFormat('arrayOfObjectsReverse')">
+                        <input type="radio" id="arrayOfObjectsReverse" name="reverseFormat" value="arrayOfObjectsReverse">
+                        <label for="arrayOfObjectsReverse">
+                            <div class="format-title">Array of Objects</div>
+                            <div class="format-desc">Rows → Array</div>
+                            <div class="format-example">name<br>John → [{"name": "John"}]</div>
+                        </label>
+                    </div>
+                    
+                    <div class="format-option" onclick="selectReverseFormat('arrayOfArraysReverse')">
+                        <input type="radio" id="arrayOfArraysReverse" name="reverseFormat" value="arrayOfArraysReverse">
+                        <label for="arrayOfArraysReverse">
+                            <div class="format-title">Array of Arrays</div>
+                            <div class="format-desc">All rows → Arrays</div>
+                            <div class="format-example">name<br>John → [["name"], ["John"]]</div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="file-upload" id="fileUpload" onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display: none;" onchange="handleFileUpload(event)">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Drop file or click to upload</div>
+                    <div class="upload-hint">CSV, XLS, XLSX supported</div>
+                    <div class="file-name hidden" id="fileName"></div>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button class="convert-btn" onclick="convertToJSON()">Convert</button>
+                <button class="download-btn" id="downloadBtnSheets" onclick="downloadJSON()">Download JSON</button>
+            </div>
+        </div>
+        
+        <div class="output-section card" id="outputSection">
+            <div id="tableOutput">
+                <div class="table-container">
+                    <table id="outputTable">
+                        <thead id="tableHead">
+                        </thead>
+                        <tbody id="tableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="row-count" id="rowCount"></div>
+            </div>
+            
+            <div id="jsonOutput" class="hidden">
+                <button class="copy-btn" onclick="copyJSON()">Copy JSON</button>
+                <div class="json-output" id="jsonDisplay"></div>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h3>How to use</h3>
+            <p id="instructions">
+                <strong>JSON → Sheets:</strong> Paste JSON, select format, convert, download CSV<br>
+                <strong>Sheets → JSON:</strong> Upload file (CSV/Excel), select format, convert, download JSON
+            </p>
+        </div>
+    </div>
+
+    <script>
+        let convertedData = [];
+        let headers = [];
+        let currentFormat = 'keyValue';
+        let currentReverseFormat = 'keyValueReverse';
+        let currentMode = 'jsonToSheets';
+        let uploadedFileData = null;
+        let convertedJSON = null;
+
+        function switchMode(mode) {
+            currentMode = mode;
+            
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            if (mode === 'jsonToSheets') {
+                document.getElementById('jsonToSheetsMode').classList.remove('hidden');
+                document.getElementById('sheetsToJsonMode').classList.add('hidden');
+            } else {
+                document.getElementById('jsonToSheetsMode').classList.add('hidden');
+                document.getElementById('sheetsToJsonMode').classList.remove('hidden');
+            }
+            
+            document.getElementById('outputSection').classList.remove('show');
+            document.getElementById('downloadBtnJSON').classList.remove('show');
+            document.getElementById('downloadBtnSheets').classList.remove('show');
+        }
+
+        function selectFormat(format) {
+            currentFormat = format;
+            document.querySelectorAll('#jsonToSheetsMode .format-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            document.getElementById(format).checked = true;
+        }
+        
+        function selectReverseFormat(format) {
+            currentReverseFormat = format;
+            document.querySelectorAll('#sheetsToJsonMode .format-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            document.getElementById(format).checked = true;
+        }
+
+        const fileUpload = document.getElementById('fileUpload');
+        
+        fileUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUpload.classList.add('dragover');
+        });
+        
+        fileUpload.addEventListener('dragleave', () => {
+            fileUpload.classList.remove('dragover');
+        });
+        
+        fileUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                processFile(file);
+            }
+        });
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+
+        function processFile(file) {
+            const fileName = document.getElementById('fileName');
+            fileName.textContent = `📄 ${file.name}`;
+            fileName.classList.remove('hidden');
+            
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            
+            if (fileExtension === 'csv') {
+                Papa.parse(file, {
+                    complete: function(results) {
+                        uploadedFileData = results.data;
+                        showSuccess('File loaded successfully');
+                    },
+                    error: function(error) {
+                        showError('Error reading CSV: ' + error.message);
+                    }
+                });
+            } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        uploadedFileData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                        showSuccess('File loaded successfully');
+                    } catch (error) {
+                        showError('Error reading Excel: ' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                showError('Unsupported format. Use CSV or Excel files');
+            }
+        }
+
+        function convertToJSON() {
+            if (!uploadedFileData || uploadedFileData.length === 0) {
+                showError('Please upload a file first');
+                return;
+            }
+            
+            try {
+                switch(currentReverseFormat) {
+                    case 'keyValueReverse':
+                        convertedJSON = convertToKeyValueJSON(uploadedFileData);
+                        break;
+                    case 'arrayOfObjectsReverse':
+                        convertedJSON = convertToArrayOfObjectsJSON(uploadedFileData);
+                        break;
+                    case 'arrayOfArraysReverse':
+                        convertedJSON = uploadedFileData;
+                        break;
+                }
+                
+                displayJSON(convertedJSON);
+                document.getElementById('outputSection').classList.add('show');
+                document.getElementById('downloadBtnSheets').classList.add('show');
+                document.getElementById('tableOutput').classList.add('hidden');
+                document.getElementById('jsonOutput').classList.remove('hidden');
+                
+                const existingError = document.querySelector('.error');
+                if (existingError) {
+                    existingError.remove();
+                }
+            } catch (error) {
+                showError('Error converting to JSON: ' + error.message);
+            }
+        }
+
+        function convertToKeyValueJSON(data) {
+            const result = {};
+            data.forEach(row => {
+                if (row.length >= 2 && row[0]) {
+                    result[row[0]] = row[1];
+                }
+            });
+            return result;
+        }
+
+        function convertToArrayOfObjectsJSON(data) {
+            if (data.length < 2) return [];
+            
+            const headers = data[0];
+            const result = [];
+            
+            for (let i = 1; i < data.length; i++) {
+                const obj = {};
+                headers.forEach((header, index) => {
+                    if (header) {
+                        obj[header] = data[i][index];
+                    }
+                });
+                result.push(obj);
+            }
+            
+            return result;
+        }
+
+        function displayJSON(json) {
+            const jsonDisplay = document.getElementById('jsonDisplay');
+            jsonDisplay.textContent = JSON.stringify(json, null, 2);
+        }
+
+        function copyJSON() {
+            const jsonText = JSON.stringify(convertedJSON, null, 2);
+            navigator.clipboard.writeText(jsonText).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+
+        function downloadJSON() {
+            if (!convertedJSON) {
+                showError('No JSON to download. Please convert first.');
+                return;
+            }
+            
+            const jsonStr = JSON.stringify(convertedJSON, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', `converted_${currentReverseFormat}.json`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function convertJSON() {
+            const input = document.getElementById('jsonInput').value.trim();
+            const outputSection = document.getElementById('outputSection');
+            const downloadBtn = document.getElementById('downloadBtnJSON');
+            
+            if (!input) {
+                showError('Please paste your JSON data');
+                return;
+            }
+            
+            try {
+                const jsonData = JSON.parse(input);
+                
+                switch(currentFormat) {
+                    case 'keyValue':
+                        convertKeyValue(jsonData);
+                        break;
+                    case 'arrayOfObjects':
+                        convertArrayOfObjects(jsonData);
+                        break;
+                    case 'nestedObject':
+                        convertNestedObject(jsonData);
+                        break;
+                    case 'arrayOfArrays':
+                        convertArrayOfArrays(jsonData);
+                        break;
+                }
+                
+                renderTable();
+                outputSection.classList.add('show');
+                downloadBtn.classList.add('show');
+                document.getElementById('tableOutput').classList.remove('hidden');
+                document.getElementById('jsonOutput').classList.add('hidden');
+                
+                const existingError = document.querySelector('.error');
+                if (existingError) {
+                    existingError.remove();
+                }
+                
+            } catch (error) {
+                showError('Invalid JSON format. Please check your input.');
+            }
+        }
+        
+        function convertKeyValue(data) {
+            if (typeof data !== 'object' || data === null) {
+                throw new Error('Data must be an object');
+            }
+            
+            headers = ['Key', 'Value'];
+            convertedData = Object.entries(data).map(([key, value]) => [key, value]);
+        }
+        
+        function convertArrayOfObjects(data) {
+            if (!Array.isArray(data) || data.length === 0) {
+                throw new Error('Data must be a non-empty array');
+            }
+            
+            const firstItem = data[0];
+            if (typeof firstItem !== 'object') {
+                throw new Error('Array items must be objects');
+            }
+            
+            headers = Object.keys(firstItem);
+            convertedData = data.map(item => headers.map(key => item[key] ?? ''));
+        }
+        
+        function convertNestedObject(data, prefix = '') {
+            if (typeof data !== 'object' || data === null) {
+                throw new Error('Data must be an object');
+            }
+            
+            headers = ['Key', 'Value'];
+            convertedData = [];
+            
+            function flatten(obj, prefix = '') {
+                for (const [key, value] of Object.entries(obj)) {
+                    const fullKey = prefix ? `${prefix}.${key}` : key;
+                    
+                    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                        flatten(value, fullKey);
+                    } else {
+                        convertedData.push([fullKey, value]);
+                    }
+                }
+            }
+            
+            flatten(data);
+        }
+        
+        function convertArrayOfArrays(data) {
+            if (!Array.isArray(data) || data.length === 0) {
+                throw new Error('Data must be a non-empty array');
+            }
+            
+            if (!Array.isArray(data[0])) {
+                throw new Error('Data must be an array of arrays');
+            }
+            
+            headers = data[0].map(String);
+            convertedData = data.slice(1);
+        }
+        
+        function renderTable() {
+            const tableHead = document.getElementById('tableHead');
+            const tableBody = document.getElementById('tableBody');
+            const rowCount = document.getElementById('rowCount');
+            
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '';
+            
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+            
+            convertedData.forEach(row => {
+                const tr = document.createElement('tr');
+                row.forEach(cell => {
+                    const td = document.createElement('td');
+                    td.textContent = cell ?? '';
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+            
+            rowCount.textContent = `${convertedData.length} rows`;
+        }
+        
+        function downloadCSV() {
+            if (convertedData.length === 0) {
+                showError('No data to download. Please convert JSON first.');
+                return;
+            }
+            
+            let csvContent = headers.map(escapeCSV).join(',') + '\n';
+            
+            convertedData.forEach(row => {
+                csvContent += row.map(cell => escapeCSV(String(cell ?? ''))).join(',') + '\n';
+            });
+            
+            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', `converted_${currentFormat}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        function escapeCSV(str) {
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        }
+        
+        function showError(message) {
+            const existingError = document.querySelector('.error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            const errorBox = document.createElement('div');
+            errorBox.className = 'info-box error';
+            errorBox.innerHTML = `
+                <h3>⚠️ Error</h3>
+                <p>${message}</p>
+            `;
+            
+            document.querySelector('.container').appendChild(errorBox);
+            
+            document.getElementById('outputSection').classList.remove('show');
+            document.getElementById('downloadBtnJSON').classList.remove('show');
+            document.getElementById('downloadBtnSheets').classList.remove('show');
+        }
+        
+        function showSuccess(message) {
+            const existingError = document.querySelector('.error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            const successBox = document.createElement('div');
+            successBox.className = 'info-box';
+            successBox.innerHTML = `
+                <h3>✅ Success</h3>
+                <p>${message}</p>
+            `;
+            
+            document.querySelector('.container').appendChild(successBox);
+            
+            setTimeout(() => {
+                successBox.remove();
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
